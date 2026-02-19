@@ -1,6 +1,6 @@
-import '../../domain/entities/chat_message.dart';
+import '../../data/datasources/chat_remote_datasource.dart';
+import '../../data/models/message_item.dart';
 import '../../domain/repositories/chat_repository.dart';
-import '../datasources/chat_remote_datasource.dart';
 
 class ChatRepositoryImpl implements ChatRepository {
   final ChatRemoteDataSource _remoteDataSource;
@@ -9,13 +9,18 @@ class ChatRepositoryImpl implements ChatRepository {
       : _remoteDataSource = remoteDataSource ?? ChatRemoteDataSource();
 
   @override
-  Stream<String> sendMessage(String message, List<ChatMessage> history) {
+  Stream<String> sendMessage(String message, List<MessageItem> history) {
     final historyJson = history
         .where((m) => m.role != 'system')
         .map((m) => {'role': m.role, 'content': m.content})
         .toList();
     
     return _remoteDataSource.sendMessage(message, historyJson);
+  }
+
+  @override
+  void cancelRequest() {
+    _remoteDataSource.cancelRequest();
   }
 
   @override

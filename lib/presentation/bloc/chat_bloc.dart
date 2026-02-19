@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
-import '../../domain/entities/chat_message.dart';
+import '../../data/models/message_item.dart';
 import '../../domain/repositories/chat_repository.dart';
 import 'chat_event.dart';
 import 'chat_state.dart';
@@ -10,45 +9,33 @@ import 'chat_state.dart';
 class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
   final ChatRepository _repository;
   final _uuid = const Uuid();
-  final types.User _user = types.User(
-    id: 'user',
-    firstName: 'You',
-  );
-  final types.User _assistant = types.User(
-    id: 'assistant',
-    firstName: 'Mirai',
-  );
-
-  List<ChatMessage> _chatHistory = [];
+  final List<MessageItem> _chatHistory = [];
 
   ChatBloc({required ChatRepository repository})
       : _repository = repository,
         super(const ChatBlocState()) {
     on<SendMessageEvent>(_onSendMessage);
+    on<RegenerateMessageEvent>(_onRegenerateMessage);
     on<CancelStreamEvent>(_onCancelStream);
     on<ClearChatEvent>(_onClearChat);
+    on<LoadChatHistoryEvent>(_onLoadChatHistory);
   }
 
   Future<void> _onSendMessage(
     SendMessageEvent event,
     Emitter<ChatBlocState> emit,
   ) async {
-    final userMessage = types.TextMessage(
+    final userMessage = MessageItem(
       id: _uuid.v4(),
-      author: _user,
-      text: event.message,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    final currentMessages = List<types.Message>.from(state.messages);
-    currentMessages.insert(0, userMessage);
-
-    _chatHistory.add(ChatMessage(
-      id: userMessage.id,
       content: event.message,
       role: 'user',
       createdAt: DateTime.now(),
-    ));
+    );
+
+    final currentMessages = List<MessageItem>.from(state.messages);
+    currentMessages.add(userMessage);
+
+    _chatHistory.add(userMessage);
 
     emit(state.copyWith(
       messages: currentMessages,
@@ -59,42 +46,141 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
     final assistantMessageId = _uuid.v4();
     String assistantContent = '';
 
+    final streamingMessage = MessageItem(
+      id: assistantMessageId,
+      content: '',
+      role: 'assistant',
+      createdAt: DateTime.now(),
+      isStreaming: true,
+    );
+    currentMessages.add(streamingMessage);
+    emit(state.copyWith(messages: List.from(currentMessages)));
+
     try {
       await for (final chunk in _repository.sendMessage(event.message, _chatHistory)) {
         assistantContent += chunk;
 
-        final existingIndex = currentMessages.indexWhere(
-          (m) => m.id == assistantMessageId,
+        final updatedStreamingMessage = streamingMessage.copyWith(
+          content: assistantContent,
         );
 
-        if (existingIndex >= 0) {
-          currentMessages.removeAt(existingIndex);
+        final index = currentMessages.indexWhere((m) => m.id == assistantMessageId);
+        if (index >= 0) {
+          currentMessages[index] = updatedStreamingMessage;
         }
-
-        final assistantMessage = types.TextMessage(
-          id: assistantMessageId,
-          author: _assistant,
-          text: assistantContent,
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-        );
-
-        currentMessages.insert(0, assistantMessage);
 
         emit(state.copyWith(
           messages: List.from(currentMessages),
         ));
       }
 
-      _chatHistory.add(ChatMessage(
-        id: assistantMessageId,
+      final finalAssistantMessage = streamingMessage.copyWith(
         content: assistantContent,
-        role: 'assistant',
-        createdAt: DateTime.now(),
-      ));
+        isStreaming: false,
+      );
+
+      final idx = currentMessages.indexWhere((m) => m.id == assistantMessageId);
+      if (idx >= 0) {
+        currentMessages[idx] = finalAssistantMessage;
+      }
+
+      _chatHistory.add(finalAssistantMessage);
 
       emit(state.copyWith(
         status: ChatStatus.success,
         isStreaming: false,
+        messages: List.from(currentMessages),
+      ));
+    } catch (e) {
+      final errorMessage = MessageItem(
+        id: _uuid.v4(),
+        content: 'Error: ${e.toString()}',
+        role: 'assistant',
+        createdAt: DateTime.now(),
+        isStreaming: false,
+      );
+      currentMessages.add(errorMessage);
+
+      emit(state.copyWith(
+        status: ChatStatus.error,
+        errorMessage: e.toString(),
+        isStreaming: false,
+        messages: List.from(currentMessages),
+      ));
+    }
+  }
+
+  Future<void> _onRegenerateMessage(
+    RegenerateMessageEvent event,
+    Emitter<ChatBlocState> emit,
+  ) async {
+    if (_chatHistory.isEmpty) return;
+
+    final userMessageIndex = _chatHistory.lastIndexWhere((m) => m.role == 'user');
+    if (userMessageIndex == -1) return;
+
+    final userMessage = _chatHistory[userMessageIndex];
+
+    final currentMessages = List<MessageItem>.from(state.messages);
+    currentMessages.removeWhere((m) => m.role == 'assistant' && m.isStreaming);
+
+    while (_chatHistory.isNotEmpty && _chatHistory.last.role != 'user') {
+      _chatHistory.removeLast();
+    }
+
+    emit(state.copyWith(
+      messages: currentMessages,
+      status: ChatStatus.loading,
+      isStreaming: true,
+    ));
+
+    final assistantMessageId = _uuid.v4();
+    String assistantContent = '';
+
+    final streamingMessage = MessageItem(
+      id: assistantMessageId,
+      content: '',
+      role: 'assistant',
+      createdAt: DateTime.now(),
+      isStreaming: true,
+    );
+    currentMessages.add(streamingMessage);
+    emit(state.copyWith(messages: List.from(currentMessages)));
+
+    try {
+      await for (final chunk in _repository.sendMessage(userMessage.content, _chatHistory)) {
+        assistantContent += chunk;
+
+        final updatedStreamingMessage = streamingMessage.copyWith(
+          content: assistantContent,
+        );
+
+        final index = currentMessages.indexWhere((m) => m.id == assistantMessageId);
+        if (index >= 0) {
+          currentMessages[index] = updatedStreamingMessage;
+        }
+
+        emit(state.copyWith(
+          messages: List.from(currentMessages),
+        ));
+      }
+
+      final finalAssistantMessage = streamingMessage.copyWith(
+        content: assistantContent,
+        isStreaming: false,
+      );
+
+      final idx = currentMessages.indexWhere((m) => m.id == assistantMessageId);
+      if (idx >= 0) {
+        currentMessages[idx] = finalAssistantMessage;
+      }
+
+      _chatHistory.add(finalAssistantMessage);
+
+      emit(state.copyWith(
+        status: ChatStatus.success,
+        isStreaming: false,
+        messages: List.from(currentMessages),
       ));
     } catch (e) {
       emit(state.copyWith(
@@ -106,6 +192,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
   }
 
   void _onCancelStream(CancelStreamEvent event, Emitter<ChatBlocState> emit) {
+    _repository.cancelRequest();
     emit(state.copyWith(
       isStreaming: false,
       status: ChatStatus.success,
@@ -113,8 +200,15 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
   }
 
   void _onClearChat(ClearChatEvent event, Emitter<ChatBlocState> emit) {
-    _chatHistory = [];
+    _chatHistory.clear();
     emit(const ChatBlocState());
+  }
+
+  void _onLoadChatHistory(LoadChatHistoryEvent event, Emitter<ChatBlocState> emit) {
+    emit(state.copyWith(
+      messages: List.from(event.messages),
+      status: ChatStatus.success,
+    ));
   }
 
   @override

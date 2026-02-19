@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_chat_ui/flutter_chat_ui.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import '../bloc/chat_bloc.dart';
 import '../bloc/chat_event.dart';
 import '../bloc/chat_state.dart';
+import '../widgets/chat_list.dart';
+import '../widgets/chat_input.dart';
 
 class ChatPage extends StatelessWidget {
   const ChatPage({super.key});
@@ -13,31 +13,88 @@ class ChatPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mirai Chat'),
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.smart_toy_outlined, size: 28),
+            SizedBox(width: 8),
+            Text('Mirai'),
+          ],
+        ),
         actions: [
+          BlocBuilder<ChatBloc, ChatBlocState>(
+            builder: (context, state) {
+              if (state.isStreaming) {
+                return IconButton(
+                  icon: const Icon(Icons.stop),
+                  onPressed: () {
+                    context.read<ChatBloc>().add(CancelStreamEvent());
+                  },
+                  tooltip: 'Stop',
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: () {
-              context.read<ChatBloc>().add(ClearChatEvent());
+              _showClearChatDialog(context);
+            },
+            tooltip: 'Clear chat',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: BlocBuilder<ChatBloc, ChatBlocState>(
+              builder: (context, state) {
+                return ChatList(
+                  messages: state.messages,
+                  isTyping: state.isStreaming,
+                  onRegenerate: (message) {
+                    context.read<ChatBloc>().add(RegenerateMessageEvent(message));
+                  },
+                );
+              },
+            ),
+          ),
+          BlocBuilder<ChatBloc, ChatBlocState>(
+            builder: (context, state) {
+              return ChatInput(
+                onSend: (text) {
+                  context.read<ChatBloc>().add(SendMessageEvent(text));
+                },
+                isLoading: state.isStreaming,
+              );
             },
           ),
         ],
       ),
-      body: BlocBuilder<ChatBloc, ChatBlocState>(
-        builder: (context, state) {
-          return Chat(
-            messages: state.messages,
-            onSendPressed: (partialText) {
-              context.read<ChatBloc>().add(SendMessageEvent(partialText.text));
+    );
+  }
+
+  void _showClearChatDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear chat?'),
+        content: const Text('This will delete all messages. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              context.read<ChatBloc>().add(ClearChatEvent());
+              Navigator.pop(dialogContext);
             },
-            user: const types.User(id: 'user'),
-            theme: const DefaultChatTheme(
-              primaryColor: Color(0xFF6C63FF),
-              backgroundColor: Color(0xFFF5F5F5),
-            ),
-            isAttachmentUploading: state.isStreaming,
-          );
-        },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
       ),
     );
   }

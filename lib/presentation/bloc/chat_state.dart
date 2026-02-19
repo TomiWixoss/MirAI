@@ -1,10 +1,10 @@
 import 'package:equatable/equatable.dart';
-import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import '../../data/models/message_item.dart';
 
 enum ChatStatus { initial, loading, success, error }
 
 class ChatBlocState extends Equatable {
-  final List<types.Message> messages;
+  final List<MessageItem> messages;
   final ChatStatus status;
   final String? errorMessage;
   final bool isStreaming;
@@ -17,7 +17,7 @@ class ChatBlocState extends Equatable {
   });
 
   ChatBlocState copyWith({
-    List<types.Message>? messages,
+    List<MessageItem>? messages,
     ChatStatus? status,
     String? errorMessage,
     bool? isStreaming,
