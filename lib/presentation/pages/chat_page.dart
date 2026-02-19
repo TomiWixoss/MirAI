@@ -26,7 +26,7 @@ class ChatPage extends StatelessWidget {
             builder: (context, state) {
               if (state.isStreaming) {
                 return IconButton(
-                  icon: const Icon(Icons.stop),
+                  icon: const Icon(Icons.stop, color: Colors.red),
                   onPressed: () {
                     context.read<ChatBloc>().add(CancelStreamEvent());
                   },
@@ -37,11 +37,28 @@ class ChatPage extends StatelessWidget {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () {
-              _showClearChatDialog(context);
+            icon: const Icon(Icons.history),
+            onPressed: () => _showChatHistory(context),
+            tooltip: 'Chat History',
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'clear') {
+                _showClearChatDialog(context);
+              }
             },
-            tooltip: 'Clear chat',
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 20),
+                    SizedBox(width: 8),
+                    Text('Clear chat'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -80,7 +97,7 @@ class ChatPage extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear chat?'),
-        content: const Text('This will delete all messages. This action cannot be undone.'),
+        content: const Text('This will delete all messages.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -95,6 +112,81 @@ class ChatPage extends StatelessWidget {
             child: const Text('Clear'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showChatHistory(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) {
+          return Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Chat History',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          context.read<ChatBloc>().add(ClearChatEvent());
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(),
+                Expanded(
+                  child: ListView.builder(
+                    controller: scrollController,
+                    itemCount: 5,
+                    itemBuilder: (context, index) {
+                      return ListTile(
+                        leading: const Icon(Icons.chat_bubble_outline),
+                        title: Text('Chat ${index + 1}'),
+                        subtitle: Text(
+                          'Tap to load...',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

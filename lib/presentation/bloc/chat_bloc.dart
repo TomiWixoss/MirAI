@@ -25,7 +25,7 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
     SendMessageEvent event,
     Emitter<ChatBlocState> emit,
   ) async {
-    final userMessage = MessageItem(
+    final userMessageItem = MessageItem(
       id: _uuid.v4(),
       content: event.message,
       role: 'user',
@@ -33,9 +33,9 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
     );
 
     final currentMessages = List<MessageItem>.from(state.messages);
-    currentMessages.add(userMessage);
+    currentMessages.add(userMessageItem);
 
-    _chatHistory.add(userMessage);
+    _chatHistory.add(userMessageItem);
 
     emit(state.copyWith(
       messages: currentMessages,
@@ -205,6 +205,8 @@ class ChatBloc extends Bloc<ChatEvent, ChatBlocState> {
   }
 
   void _onLoadChatHistory(LoadChatHistoryEvent event, Emitter<ChatBlocState> emit) {
+    _chatHistory.clear();
+    _chatHistory.addAll(event.messages);
     emit(state.copyWith(
       messages: List.from(event.messages),
       status: ChatStatus.success,

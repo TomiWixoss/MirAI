@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import '../../core/theme/chat_theme.dart';
 import '../../data/models/message_item.dart';
 
@@ -26,11 +27,11 @@ class ChatBubble extends StatelessWidget {
         children: [
           Container(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.85,
+              maxWidth: MediaQuery.of(context).size.width * 0.9,
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
-              color: isUser ? ChatTheme.userMessageColor : ChatTheme.aiMessageColor,
+              color: isUser ? ChatTheme.userMessageColor : Colors.transparent,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(24),
                 topRight: const Radius.circular(24),
@@ -41,14 +42,24 @@ class ChatBubble extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
-                  message.content,
-                  style: TextStyle(
-                    color: isUser ? ChatTheme.userTextColor : ChatTheme.aiTextColor,
-                    fontSize: 16,
-                    height: 1.5,
+                if (isUser)
+                  SelectableText(
+                    message.content,
+                    style: const TextStyle(
+                      color: ChatTheme.userTextColor,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  )
+                else
+                  GptMarkdown(
+                    message.content,
+                    style: const TextStyle(
+                      color: ChatTheme.aiTextColor,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
                   ),
-                ),
                 if (message.isStreaming)
                   const Padding(
                     padding: EdgeInsets.only(top: 8),
